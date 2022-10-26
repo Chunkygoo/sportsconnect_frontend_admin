@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Admin, Resource, UserMenu, AppBar, Layout } from 'react-admin';
 import DataProvider from './Provider/DataProvider.ts';
 import UserList from './User/UserList';
@@ -7,95 +7,31 @@ import UserCreate from './User/UserCreate';
 import UniversityList from './University/UniversityList';
 import UniversityCreate from './University/UniversityCreate';
 import UniversityEdit from './University/UniversityEdit';
-import { SessionAuth, signOut } from 'supertokens-auth-react/recipe/session';
-import MyLogoutButton from './MyLogoutButton';
-import { getCurrentUser } from '../../network/lib/users';
+import { SessionAuth } from 'supertokens-auth-react/recipe/session';
+import MyLogoutButton from './UserMenuItems/MyLogoutButton';
 import Spinner from '../Spinner';
 import Dashboard from './Dashboard';
+import LoggedInUserEmail from './UserMenuItems/LoggedInUserEmail';
+import { getCurrentUser } from '../../network/lib/users';
 
-export default function AdminBase() {
+export default function AdminBase({ reactAdminSignOut }) {
   const [loading, setLoading] = useState(true);
-  const abortControllerRef = useRef(new AbortController());
-  const intervalDoubleDomainRef = useRef(null);
-  const [currentUserId, setCurrentUserId] = useState(null);
-  const [resDataId, setResDataId] = useState(null);
-
-  const reactAdminSignOut = async () => {
-    await signOut();
-    setCurrentUserId(null); // after signing out, we need to reset the currentUserId to null
-    setResDataId(null); // after signing out, we need to reset the resDataId to null
-    window.location.reload();
-  };
-
-  // Workaround for two sites sharing cookie
-  useEffect(() => {
-    const abortControllerRefCurrent = abortControllerRef.current;
-    const helper = async () => {
-      if (!intervalDoubleDomainRef.current) {
-        intervalDoubleDomainRef.current = setInterval(async () => {
-          let res = await getCurrentUser(abortControllerRefCurrent);
-          if (res?.status === 200 && res?.data.role !== 'admin') {
-            await reactAdminSignOut();
-          } else if (res?.status === 200) {
-            setResDataId(res?.data.id);
-            setLoading(false);
-          }
-        }, 3000);
-      }
-    };
-    helper();
-    return () => {
-      abortControllerRefCurrent.abort();
-      clearInterval(intervalDoubleDomainRef.current);
-    };
-  }, []);
+  const [loggedInUser, setLoggedInUser] = useState(null);
 
   useEffect(() => {
     const helper = async () => {
-      if (!currentUserId) {
-        setCurrentUserId(resDataId);
-      } else if (currentUserId !== resDataId) {
-        await reactAdminSignOut();
+      let res = await getCurrentUser();
+      if (res?.status === 200) {
+        if (res?.data.role !== 'admin') {
+          await reactAdminSignOut();
+        } else {
+          setLoggedInUser(res.data);
+        }
       }
+      setLoading(false);
     };
     helper();
-  }, [currentUserId, resDataId]);
-  // End workaround for two sites sharing cookie
-
-  // useEffect(() => {
-  //   const abortControllerRefCurrent = abortControllerRef.current;
-  //   const wrapper = async () => {
-  //     let res = await getCurrentUser(abortControllerRefCurrent);
-  //     if (res?.status !== 200 || res?.data.role !== 'admin') {
-  //       await reactAdminSignOut();
-  //     }
-  //     setLoading(false);
-  //     setCurrentUserId(res?.data.id);
-  //   };
-  //   wrapper();
-  //   return () => {
-  //     abortControllerRefCurrent.abort();
-  //   };
-  // }, []);
-
-  // useEffect(() => {
-  //   if (!currentUserId) return;
-  //   const abortControllerRefCurrent = abortControllerRef.current;
-  //   if (!intervalRef.current) {
-  //     intervalRef.current = setInterval(async () => {
-  //       if (await doesSessionExist()) {
-  //         const res = await getCurrentUser(abortControllerRefCurrent);
-  //         if (currentUserId !== res?.data.id) {
-  //           await reactAdminSignOut();
-  //         }
-  //       }
-  //     }, 3000);
-  //   }
-  //   return () => {
-  //     abortControllerRefCurrent.abort();
-  //     clearInterval(intervalRef.current);
-  //   };
-  // }, [currentUserId]);
+  }, [reactAdminSignOut]);
 
   if (loading) {
     return (
@@ -113,6 +49,7 @@ export default function AdminBase() {
   const dataProvider = DataProvider(process.env.REACT_APP_API_DATA_URL);
   const MyUserMenu = (props) => (
     <UserMenu {...props}>
+      <LoggedInUserEmail loggedInUserEmail={loggedInUser.email} />
       <MyLogoutButton reactAdminSignOut={reactAdminSignOut} />
     </UserMenu>
   );
